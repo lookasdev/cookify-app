@@ -137,3 +137,9 @@ temp/
 *.njsproj
 *.sln
 *.sw?
+
+# Cursor/SpecStory workspace artifacts
+.cursor/rules/
+.specstory/
+frontend/env.example
+backend/env.example
