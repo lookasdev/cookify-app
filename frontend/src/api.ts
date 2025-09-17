@@ -129,11 +129,13 @@ class ApiClient {
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
     const token = localStorage.getItem('token');
+    const needsNgrokBypass = /ngrok\-free\.app|ngrok\.io/.test(this.baseUrl);
 
     const config: RequestInit = {
       headers: {
         'Content-Type': 'application/json',
         ...(token && { Authorization: `Bearer ${token}` }),
+        ...(needsNgrokBypass ? { 'ngrok-skip-browser-warning': 'true' } : {}),
         ...options.headers,
       },
       ...options,
@@ -141,13 +143,26 @@ class ApiClient {
 
     try {
       const response = await fetch(url, config);
-      
+      const contentType = response.headers.get('content-type') || '';
+      const isJson = contentType.includes('application/json');
+
       if (!response.ok) {
-        const errorData: ApiError = await response.json();
-        throw new Error(errorData.detail || 'Request failed');
+        if (isJson) {
+          const errorData: ApiError = await response.json();
+          throw new Error(errorData.detail || `Request failed (${response.status})`);
+        } else {
+          const text = await response.text();
+          throw new Error(`Request failed (${response.status}) at ${response.url}. Content-Type: ${contentType}. Body: ${text.substring(0, 160)}...`);
+        }
       }
 
-      return await response.json();
+      if (isJson) {
+        return await response.json();
+      }
+
+      // Successful but not JSON → surface clear error instead of crashing JSON.parse
+      const snippet = await response.text();
+      throw new Error(`Expected JSON but got '${contentType}' from ${response.url}. First bytes: ${snippet.substring(0, 160)}...`);
     } catch (error) {
       if (error instanceof Error) {
         throw error;

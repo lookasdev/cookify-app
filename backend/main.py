@@ -36,7 +36,11 @@ app = FastAPI(title="Auth App API", version="1.0.0")
 CORS_ORIGIN = os.getenv("CORS_ORIGIN", "http://localhost:5173")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[CORS_ORIGIN],
+    allow_origins=[
+        CORS_ORIGIN,
+        "https://incredible-sundae-e9647d.netlify.app",
+        "http://localhost:5173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -93,6 +97,12 @@ async def startup_event():
         print("✅ Backend ready!")
     else:
         print("❌ Failed to connect to database")
+
+
+@app.get("/")
+async def root():
+    """Friendly root endpoint"""
+    return {"ok": True, "app": "Cookify"}
 
 
 @app.get("/health")
