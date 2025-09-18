@@ -2,10 +2,21 @@ import { useState, useEffect } from 'react';
 import { LoginForm } from './components/LoginForm';
 import { ProfileCard } from './components/ProfileCard';
 import { Recipes } from './components/Recipes';
-import { api, SavedRecipe, Recipe, AIRecipe } from './api';
+import { Ingredients } from './components/Ingredients';
+import { About } from './components/About';
+// eslint-disable-next-line import/no-unresolved
+import { Pantry } from './components/Pantry';
+import { api, SavedRecipe, Recipe, AIRecipe, PantryItemOut, PantryItemIn } from './api';
 import './App.css';
 
-type Tab = 'auth' | 'profile' | 'recipes';
+type Tab = 'auth' | 'profile' | 'recipes' | 'ingredients' | 'about' | 'pantry';
+
+export interface PantryItem {
+  name: string;
+  quantity: string;
+  expiryDate?: string; // YYYY-MM-DD
+  addedAt: string;
+}
 
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>('auth');
@@ -13,6 +24,8 @@ function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [savedRecipes, setSavedRecipes] = useState<SavedRecipe[]>([]);
   const [savedRecipeIds, setSavedRecipeIds] = useState<Set<string>>(new Set());
+  const [searchIngredients, setSearchIngredients] = useState<string>('');
+  const [pantry, setPantry] = useState<PantryItem[]>([]);
 
   // Check for existing token on app start
   useEffect(() => {
@@ -20,12 +33,10 @@ function App() {
       const token = localStorage.getItem('token');
       if (token) {
         try {
-          // Verify token by fetching profile
           await api.getProfile();
           setIsLoggedIn(true);
           setActiveTab('profile');
-        } catch (error) {
-          // Token is invalid, remove it
+        } catch {
           localStorage.removeItem('token');
         }
       }
@@ -35,18 +46,19 @@ function App() {
     checkAuth();
   }, []);
 
-  // Fetch saved recipes whenever user becomes logged in
+  // Fetch data when user becomes logged in/logs out
   useEffect(() => {
     if (isLoggedIn) {
       fetchSavedRecipes();
+      fetchPantry();
     } else {
-      // Clear saved recipes when logged out
       setSavedRecipes([]);
       setSavedRecipeIds(new Set());
+      setPantry([]);
     }
   }, [isLoggedIn]);
 
-  // Fetch saved recipes when user logs in
+  // Saved recipes
   const fetchSavedRecipes = async () => {
     try {
       const response = await api.getSavedRecipes();
@@ -82,7 +94,6 @@ function App() {
       
       await api.saveRecipe(recipe.id, saveData);
       
-      // Update local state optimistically
       const newSavedRecipe: SavedRecipe = {
         id: `temp_${Date.now()}`,
         recipe_id: recipe.id,
@@ -111,7 +122,6 @@ function App() {
   const handleUnsaveRecipe = async (recipeId: string) => {
     try {
       await api.deleteSavedRecipe(recipeId);
-      // Update local state optimistically
       setSavedRecipes(prev => prev.filter(recipe => recipe.recipe_id !== recipeId));
       setSavedRecipeIds(prev => {
         const newSet = new Set(prev);
@@ -124,16 +134,80 @@ function App() {
   };
 
   const handleTabChange = (tab: Tab) => {
-    // Prevent switching to auth tab when logged in
-    if (tab === 'auth' && isLoggedIn) {
-      return;
+    if (!isLoggedIn) {
+      // Only allow auth, recipes, about when logged out
+      const allowed: Tab[] = ['auth', 'recipes', 'about'];
+      if (!allowed.includes(tab)) return;
     }
+    if (tab === 'auth' && isLoggedIn) return;
     setActiveTab(tab);
   };
 
   const handleLogout = () => {
     setIsLoggedIn(false);
     setActiveTab('auth');
+  };
+
+  const updateIngredientsFromSelection = (list: string[]) => {
+    setSearchIngredients(list.join(', '));
+  };
+
+  // Pantry backend integration
+  const mapPantryOut = (p: PantryItemOut): PantryItem => ({
+    name: p.name,
+    quantity: p.quantity || '',
+    expiryDate: p.expiry_date ? p.expiry_date.slice(0, 10) : undefined,
+    addedAt: p.added_at,
+  });
+
+  const fetchPantry = async () => {
+    try {
+      const res = await api.getPantry();
+      setPantry(res.items.map(mapPantryOut));
+    } catch (e) {
+      console.error('Failed to fetch pantry:', e);
+    }
+  };
+
+  const addToPantry = async (name: string) => {
+    try {
+      const payload: PantryItemIn = { name, quantity: '' };
+      const saved = await api.upsertPantryItem(payload);
+      setPantry(prev => {
+        const others = prev.filter(i => i.name.toLowerCase() !== name.toLowerCase());
+        return [mapPantryOut(saved), ...others];
+      });
+    } catch (e) {
+      console.error('Failed to add to pantry:', e);
+      throw e;
+    }
+  };
+
+  const updatePantryItem = async (name: string, updates: Partial<PantryItem>) => {
+    try {
+      const current = pantry.find(i => i.name === name);
+      const merged = { ...current, ...updates } as PantryItem;
+      const payload: PantryItemIn = {
+        name,
+        quantity: merged.quantity,
+        expiry_date: merged.expiryDate ? new Date(merged.expiryDate).toISOString() : null,
+      };
+      const saved = await api.upsertPantryItem(payload);
+      setPantry(prev => prev.map(i => i.name === name ? mapPantryOut(saved) : i));
+    } catch (e) {
+      console.error('Failed to update pantry item:', e);
+      throw e;
+    }
+  };
+
+  const removePantryItem = async (name: string) => {
+    try {
+      await api.deletePantryItem(name);
+      setPantry(prev => prev.filter(i => i.name !== name));
+    } catch (e) {
+      console.error('Failed to remove pantry item:', e);
+      throw e;
+    }
   };
 
   if (isLoading) {
@@ -168,34 +242,97 @@ function App() {
             savedRecipeIds={savedRecipeIds}
             onSaveRecipe={handleSaveRecipe}
             onUnsaveRecipe={handleUnsaveRecipe}
+            ingredientsValue={searchIngredients}
+            onIngredientsChange={setSearchIngredients}
           />
+        )}
+
+        {activeTab === 'ingredients' && (
+          <Ingredients 
+            onSelectionChange={updateIngredientsFromSelection} 
+            onAddToPantry={addToPantry}
+            onRemoveFromPantry={removePantryItem}
+            pantryNames={new Set(pantry.map(p => p.name.toLowerCase()))}
+          />
+        )}
+
+        {activeTab === 'pantry' && (
+          <Pantry 
+            items={pantry}
+            onUpdate={updatePantryItem}
+            onRemove={removePantryItem}
+          />
+        )}
+
+        {activeTab === 'about' && (
+          <About />
         )}
       </main>
 
       <nav className="bottom-nav">
         {!isLoggedIn && (
-          <button
-            className={`nav-button ${activeTab === 'auth' ? 'active' : ''}`}
-            onClick={() => handleTabChange('auth')}
-          >
-            🔐 Login/Register
-          </button>
+          <>
+            <button
+              className={`nav-button ${activeTab === 'auth' ? 'active' : ''}`}
+              onClick={() => handleTabChange('auth')}
+            >
+              🔐 Login/Register
+            </button>
+
+            <button
+              className={`nav-button ${activeTab === 'recipes' ? 'active' : ''}`}
+              onClick={() => handleTabChange('recipes')}
+            >
+              🍳 Recipes
+            </button>
+
+            <button
+              className={`nav-button ${activeTab === 'about' ? 'active' : ''}`}
+              onClick={() => handleTabChange('about')}
+            >
+              ℹ️ About
+            </button>
+          </>
         )}
         
-        <button
-          className={`nav-button ${activeTab === 'profile' ? 'active' : ''} ${!isLoggedIn ? 'disabled' : ''}`}
-          onClick={() => handleTabChange('profile')}
-          disabled={!isLoggedIn}
-        >
-          👤 Profile
-        </button>
+        {isLoggedIn && (
+          <>
+            <button
+              className={`nav-button ${activeTab === 'profile' ? 'active' : ''}`}
+              onClick={() => handleTabChange('profile')}
+            >
+              👤 Profile
+            </button>
 
-        <button
-          className={`nav-button ${activeTab === 'recipes' ? 'active' : ''}`}
-          onClick={() => handleTabChange('recipes')}
-        >
-          🍳 Recipes
-        </button>
+            <button
+              className={`nav-button ${activeTab === 'recipes' ? 'active' : ''}`}
+              onClick={() => handleTabChange('recipes')}
+            >
+              🍳 Recipes
+            </button>
+
+            <button
+              className={`nav-button ${activeTab === 'ingredients' ? 'active' : ''}`}
+              onClick={() => handleTabChange('ingredients')}
+            >
+              🧂 Ingredients
+            </button>
+
+            <button
+              className={`nav-button ${activeTab === 'pantry' ? 'active' : ''}`}
+              onClick={() => handleTabChange('pantry')}
+            >
+              🧺 Pantry
+            </button>
+
+            <button
+              className={`nav-button ${activeTab === 'about' ? 'active' : ''}`}
+              onClick={() => handleTabChange('about')}
+            >
+              ℹ️ About
+            </button>
+          </>
+        )}
       </nav>
     </div>
   );

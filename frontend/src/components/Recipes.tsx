@@ -6,15 +6,18 @@ interface RecipesProps {
   savedRecipeIds: Set<string>;
   onSaveRecipe: (recipe: Recipe | AIRecipe) => Promise<void>;
   onUnsaveRecipe: (recipeId: string) => Promise<void>;
+  ingredientsValue: string;
+  onIngredientsChange: (value: string) => void;
 }
 
 export const Recipes: React.FC<RecipesProps> = ({ 
   isLoggedIn, 
   savedRecipeIds, 
   onSaveRecipe, 
-  onUnsaveRecipe 
+  onUnsaveRecipe,
+  ingredientsValue,
+  onIngredientsChange,
 }) => {
-  const [ingredients, setIngredients] = useState('');
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [aiRecipes, setAiRecipes] = useState<AIRecipe[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -22,17 +25,27 @@ export const Recipes: React.FC<RecipesProps> = ({
   const [error, setError] = useState('');
   const [expandedRecipe, setExpandedRecipe] = useState<string | null>(null);
   const [savingRecipe, setSavingRecipe] = useState<string | null>(null);
+  const [noFullMatchWarning, setNoFullMatchWarning] = useState<string | null>(null);
+
+  const parseIngredients = () =>
+    ingredientsValue
+      .split(',')
+      .map(ing => ing.trim().toLowerCase())
+      .filter(ing => ing.length > 0);
+
+  const computeNoFullMatch = (items: Recipe[], searched: string[]) => {
+    if (searched.length < 2) return null;
+    const hasFull = items.some(r => r.match_count >= searched.length);
+    return hasFull ? null : `No recipes contain all ${searched.length} ingredients. Showing partial matches sorted by relevance.`;
+  };
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError('');
+    setNoFullMatchWarning(null);
 
-    // Parse ingredients from comma-separated input
-    const ingredientsList = ingredients
-      .split(',')
-      .map(ing => ing.trim())
-      .filter(ing => ing.length > 0);
+    const ingredientsList = parseIngredients();
 
     if (ingredientsList.length === 0) {
       setError('Add at least 1 ingredient');
@@ -43,8 +56,8 @@ export const Recipes: React.FC<RecipesProps> = ({
     try {
       const response = await api.searchRecipes({ ingredients: ingredientsList });
       setRecipes(response.items);
-      // Clear AI recipes when searching TheMealDB
       setAiRecipes([]);
+      setNoFullMatchWarning(computeNoFullMatch(response.items, ingredientsList));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to search recipes');
     } finally {
@@ -55,12 +68,9 @@ export const Recipes: React.FC<RecipesProps> = ({
   const handleGenerateAI = async () => {
     setIsGeneratingAI(true);
     setError('');
+    setNoFullMatchWarning(null);
 
-    // Parse ingredients from comma-separated input
-    const ingredientsList = ingredients
-      .split(',')
-      .map(ing => ing.trim())
-      .filter(ing => ing.length > 0);
+    const ingredientsList = parseIngredients();
 
     if (ingredientsList.length === 0) {
       setError('Add at least 1 ingredient');
@@ -71,7 +81,6 @@ export const Recipes: React.FC<RecipesProps> = ({
     try {
       const response = await api.generateAIRecipes({ ingredients: ingredientsList });
       setAiRecipes(response.items);
-      // Clear TheMealDB recipes when generating AI recipes
       setRecipes([]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate AI recipes');
@@ -120,22 +129,22 @@ export const Recipes: React.FC<RecipesProps> = ({
           <input
             type="text"
             id="ingredients"
-            value={ingredients}
-            onChange={(e) => setIngredients(e.target.value)}
+            value={ingredientsValue}
+            onChange={(e) => onIngredientsChange(e.target.value)}
             placeholder="e.g., chicken, rice, vegetables"
             disabled={isLoading}
           />
         </div>
         
         <div className="search-buttons">
-          <button type="submit" disabled={isLoading || !ingredients.trim()}>
+          <button type="submit" disabled={isLoading || !ingredientsValue.trim()}>
             {isLoading ? 'Searching...' : 'Search Recipes'}
           </button>
           
           <button 
             type="button" 
             onClick={handleGenerateAI}
-            disabled={isGeneratingAI || !ingredients.trim()}
+            disabled={isGeneratingAI || !ingredientsValue.trim()}
             className="ai-button"
           >
             {isGeneratingAI ? 'Generating...' : 'Generate with AI'}
@@ -149,13 +158,19 @@ export const Recipes: React.FC<RecipesProps> = ({
         </div>
       )}
 
-      {!isLoading && !isGeneratingAI && recipes.length === 0 && aiRecipes.length === 0 && ingredients && (
+      {noFullMatchWarning && recipes.length > 0 && (
+        <div className="warning-message" role="status">
+          {noFullMatchWarning}
+        </div>
+      )}
+
+      {!isLoading && !isGeneratingAI && recipes.length === 0 && aiRecipes.length === 0 && ingredientsValue && (
         <div className="empty-state">
           No recipes found. Try different ingredients or generate with AI.
         </div>
       )}
 
-      {!isLoading && !isGeneratingAI && !ingredients && (
+      {!isLoading && !isGeneratingAI && !ingredientsValue && (
         <div className="empty-state">
           Add at least 1 ingredient to search for recipes.
         </div>

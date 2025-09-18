@@ -14,9 +14,10 @@ from models import (
     RegisterIn, LoginIn, UserPublic, TokenOut, ProfileOut, UserInDB,
     RecipeSearchIn, RecipeSearchOut, Recipe, Ingredient,
     SaveRecipeIn, SavedRecipe, SavedRecipeOut, OkResponse,
-    AIRecipeRequest, AIRecipe, AIRecipeResponse
+    AIRecipeRequest, AIRecipe, AIRecipeResponse,
+    PantryItemIn, PantryItemOut, PantryListOut
 )
-from database import users_collection, saved_recipes_collection, create_indexes, ping_database
+from database import users_collection, saved_recipes_collection, create_indexes, ping_database, pantry_collection
 from auth import verify_password, get_password_hash, create_access_token, verify_token
 
 load_dotenv()
@@ -194,6 +195,60 @@ async def get_profile(current_user: UserInDB = Depends(get_current_user)):
         id=current_user.id,
         email=current_user.email
     )
+
+
+# Pantry Endpoints
+@app.get("/users/me/pantry", response_model=PantryListOut)
+async def list_pantry(current_user: UserInDB = Depends(get_current_user)):
+    items = []
+    async for doc in pantry_collection.find({"userId": ObjectId(current_user.id)}).sort("expiryDate", 1):
+        items.append(PantryItemOut(
+            id=str(doc["_id"]),
+            name=doc["name"],
+            quantity=doc.get("quantity", ""),
+            expiry_date=doc.get("expiryDate"),
+            added_at=doc.get("addedAt", datetime.utcnow())
+        ))
+    return PantryListOut(items=items)
+
+
+@app.post("/users/me/pantry", response_model=PantryItemOut)
+async def upsert_pantry_item(item: PantryItemIn, current_user: UserInDB = Depends(get_current_user)):
+    doc = {
+        "userId": ObjectId(current_user.id),
+        "name": item.name,
+        "quantity": item.quantity,
+        "expiryDate": item.expiry_date,
+        "addedAt": datetime.utcnow(),
+    }
+    # Upsert by (userId, name)
+    res = await pantry_collection.find_one_and_update(
+        {"userId": ObjectId(current_user.id), "name": item.name},
+        {"$set": doc, "$setOnInsert": {"createdAt": datetime.utcnow()}},
+        upsert=True,
+        return_document=True
+    )
+    if not res:
+        # Fetch again after upsert
+        res = await pantry_collection.find_one({"userId": ObjectId(current_user.id), "name": item.name})
+    return PantryItemOut(
+        id=str(res["_id"]),
+        name=res["name"],
+        quantity=res.get("quantity", ""),
+        expiry_date=res.get("expiryDate"),
+        added_at=res.get("addedAt", datetime.utcnow())
+    )
+
+
+@app.delete("/users/me/pantry/{name}", response_model=OkResponse)
+async def delete_pantry_item(name: str, current_user: UserInDB = Depends(get_current_user)):
+    result = await pantry_collection.delete_one({
+        "userId": ObjectId(current_user.id),
+        "name": name
+    })
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Pantry item not found")
+    return OkResponse(ok=True)
 
 
 @app.post("/recipes/search", response_model=RecipeSearchOut)

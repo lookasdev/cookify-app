@@ -16,6 +16,7 @@ db = client[MONGODB_DB]
 # Collections
 users_collection = db.users
 saved_recipes_collection = db.saved_recipes
+pantry_collection = db.pantry
 
 
 async def create_indexes():
@@ -33,6 +34,13 @@ async def create_indexes():
         # Create single field indexes
         await saved_recipes_collection.create_index("userId")
         await saved_recipes_collection.create_index([("createdAt", -1)])  # For sorting by newest first
+
+        # Pantry indexes: unique by (userId, name)
+        await pantry_collection.create_index([
+            ("userId", 1), ("name", 1)
+        ], unique=True)
+        await pantry_collection.create_index("userId")
+        await pantry_collection.create_index([("expiryDate", 1)])
         
         print("✅ Database indexes created successfully")
     except Exception as e:

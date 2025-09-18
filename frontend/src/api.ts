@@ -116,6 +116,25 @@ export interface ApiError {
   detail: string;
 }
 
+// Pantry types
+export interface PantryItemIn {
+  name: string;
+  quantity?: string;
+  expiry_date?: string | null;
+}
+
+export interface PantryItemOut {
+  id: string;
+  name: string;
+  quantity: string;
+  expiry_date?: string | null;
+  added_at: string;
+}
+
+export interface PantryListOut {
+  items: PantryItemOut[];
+}
+
 class ApiClient {
   private baseUrl: string;
 
@@ -221,6 +240,24 @@ class ApiClient {
     return this.request<AIRecipeResponse>('/recipes/ai', {
       method: 'POST',
       body: JSON.stringify(data),
+    });
+  }
+
+  // Pantry API
+  async getPantry(): Promise<PantryListOut> {
+    return this.request<PantryListOut>('/users/me/pantry');
+  }
+
+  async upsertPantryItem(item: PantryItemIn): Promise<PantryItemOut> {
+    return this.request<PantryItemOut>('/users/me/pantry', {
+      method: 'POST',
+      body: JSON.stringify(item),
+    });
+  }
+
+  async deletePantryItem(name: string): Promise<OkResponse> {
+    return this.request<OkResponse>(`/users/me/pantry/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
     });
   }
 }

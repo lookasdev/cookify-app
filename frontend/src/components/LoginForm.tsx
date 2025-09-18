@@ -55,6 +55,13 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
   return (
     <div className="login-form">
       <h2>Login / Register</h2>
+
+      <div className="about-notes" style={{ marginBottom: '1rem' }}>
+        <p>
+          Login to unlock extra features: manage your <strong>Pantry</strong> (quantities & expiry dates),
+          save recipes, and sync data across sessions.
+        </p>
+      </div>
       
       {error && (
         <div className="error-message">

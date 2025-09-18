@@ -132,3 +132,22 @@ class SavedRecipeOut(BaseModel):
 
 class OkResponse(BaseModel):
     ok: bool = True
+
+
+# Pantry models
+class PantryItemIn(BaseModel):
+    name: str
+    quantity: str = ""
+    expiry_date: datetime | None = None
+
+
+class PantryItemOut(BaseModel):
+    id: str
+    name: str
+    quantity: str
+    expiry_date: datetime | None = None
+    added_at: datetime
+
+
+class PantryListOut(BaseModel):
+    items: list[PantryItemOut]
