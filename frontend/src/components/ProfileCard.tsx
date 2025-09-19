@@ -22,7 +22,6 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ onLogout, savedRecipes
         setProfile(profileData);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load profile');
-        // If token is invalid, logout
         if (err instanceof Error && err.message.includes('Invalid authentication')) {
           onLogout();
         }
@@ -106,7 +105,9 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ onLogout, savedRecipes
   if (isLoading) {
     return (
       <div className="profile-card">
-        <h2>Profile</h2>
+        <div className="profile-header">
+          <h2>Profile</h2>
+        </div>
         <div className="loading">Loading profile...</div>
       </div>
     );
@@ -115,18 +116,19 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ onLogout, savedRecipes
   if (error) {
     return (
       <div className="profile-card">
-        <h2>Profile</h2>
+        <div className="profile-header">
+          <h2>Profile</h2>
+        </div>
         <div className="error-message">{error}</div>
-        <button onClick={handleLogout} className="logout-btn">
-          Logout
-        </button>
       </div>
     );
   }
 
   return (
     <div className="profile-card">
-      <h2>Profile</h2>
+      <div className="profile-header">
+        <h2>Profile</h2>
+      </div>
       
       {profile && (
         <div className="profile-info">
@@ -140,6 +142,8 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ onLogout, savedRecipes
           </div>
         </div>
       )}
+
+      <button onClick={handleLogout} className="logout-btn" style={{ marginBottom: '1rem' }}>Logout</button>
 
       <div className="saved-recipes-section">
         <h3>Saved Recipes</h3>
@@ -254,10 +258,6 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ onLogout, savedRecipes
           </div>
         )}
       </div>
-
-      <button onClick={handleLogout} className="logout-btn">
-        Logout
-      </button>
     </div>
   );
 };
