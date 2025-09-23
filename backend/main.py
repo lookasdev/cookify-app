@@ -2,13 +2,16 @@ import os
 import httpx
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from bson import ObjectId
 import google.generativeai as genai
+
+from pymongo import ReturnDocument
+
 
 from models import (
     RegisterIn, LoginIn, UserPublic, TokenOut, ProfileOut, UserInDB,
@@ -109,7 +112,7 @@ async def root():
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
+    return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
 
 
 @app.get("/debug/users")
@@ -143,7 +146,7 @@ async def register(user_data: RegisterIn):
     user_doc = {
         "email": user_data.email,
         "hashed_password": hashed_password,
-        "created_at": datetime.utcnow()
+        "created_at": datetime.now(timezone.utc)
     }
     
     try:
@@ -207,37 +210,68 @@ async def list_pantry(current_user: UserInDB = Depends(get_current_user)):
             name=doc["name"],
             quantity=doc.get("quantity", ""),
             expiry_date=doc.get("expiryDate"),
-            added_at=doc.get("addedAt", datetime.utcnow())
+            added_at=doc.get("addedAt", datetime.now(timezone.utc))
         ))
     return PantryListOut(items=items)
 
 
 @app.post("/users/me/pantry", response_model=PantryItemOut)
-async def upsert_pantry_item(item: PantryItemIn, current_user: UserInDB = Depends(get_current_user)):
+async def upsert_pantry_item(
+    item: PantryItemIn, 
+    current_user: UserInDB = Depends(get_current_user)
+):
     doc = {
         "userId": ObjectId(current_user.id),
         "name": item.name,
         "quantity": item.quantity,
         "expiryDate": item.expiry_date,
-        "addedAt": datetime.utcnow(),
+        "addedAt": datetime.now(timezone.utc),
     }
     # Upsert by (userId, name)
     res = await pantry_collection.find_one_and_update(
         {"userId": ObjectId(current_user.id), "name": item.name},
-        {"$set": doc, "$setOnInsert": {"createdAt": datetime.utcnow()}},
+        {"$set": doc, "$setOnInsert": {"createdAt": datetime.now(timezone.utc)}},
         upsert=True,
-        return_document=True
+        return_document=ReturnDocument.AFTER   # 🔑 ensures you get the new doc
     )
     if not res:
-        # Fetch again after upsert
-        res = await pantry_collection.find_one({"userId": ObjectId(current_user.id), "name": item.name})
+        res = await pantry_collection.find_one(
+            {"userId": ObjectId(current_user.id), "name": item.name}
+        )
     return PantryItemOut(
         id=str(res["_id"]),
         name=res["name"],
         quantity=res.get("quantity", ""),
         expiry_date=res.get("expiryDate"),
-        added_at=res.get("addedAt", datetime.utcnow())
+        added_at=res.get("addedAt", datetime.now(timezone.utc))
     )
+
+# @app.post("/users/me/pantry", response_model=PantryItemOut)
+# async def upsert_pantry_item(item: PantryItemIn, current_user: UserInDB = Depends(get_current_user)):
+#     doc = {
+#         "userId": ObjectId(current_user.id),
+#         "name": item.name,
+#         "quantity": item.quantity,
+#         "expiryDate": item.expiry_date,
+#         "addedAt": datetime.now(timezone.utc),
+#     }
+#     # Upsert by (userId, name)
+#     res = await pantry_collection.find_one_and_update(
+#         {"userId": ObjectId(current_user.id), "name": item.name},
+#         {"$set": doc, "$setOnInsert": {"createdAt": datetime.now(timezone.utc)}},
+#         upsert=True,
+#         return_document=True
+#     )
+#     if not res:
+#         # Fetch again after upsert
+#         res = await pantry_collection.find_one({"userId": ObjectId(current_user.id), "name": item.name})
+#     return PantryItemOut(
+#         id=str(res["_id"]),
+#         name=res["name"],
+#         quantity=res.get("quantity", ""),
+#         expiry_date=res.get("expiryDate"),
+#         added_at=res.get("addedAt", datetime.now(timezone.utc))
+#     )
 
 
 @app.delete("/users/me/pantry/{name}", response_model=OkResponse)
@@ -382,7 +416,7 @@ async def save_recipe(recipe_id: str, save_data: SaveRecipeIn, current_user: Use
             "title": save_data.title,
             "image": save_data.image,
             "source": save_data.source,
-            "createdAt": datetime.utcnow(),
+            "createdAt": datetime.now(timezone.utc),
             # Full recipe details
             "cuisine": save_data.cuisine,
             "meal_type": save_data.meal_type,
