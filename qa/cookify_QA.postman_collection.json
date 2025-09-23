@@ -169,7 +169,7 @@
 				"header": [],
 				"body": {
 					"mode": "raw",
-					"raw": "{\r\n  \"email\": \"florentin@gmail.com\",\r\n  \"password\": \"florentin\"\r\n\r\n}\r\n",
+					"raw": "{\r\n  \"email\": \"{{Test_email}}\",\r\n  \"password\": \"{{Test_password}}\"\r\n}\r\n",
 					"options": {
 						"raw": {
 							"language": "json"
@@ -665,7 +665,7 @@
 						"users",
 						"me",
 						"pantry",
-						"{{pantry_item_name}}"
+						"{{pantry_item_name_encoded}}"
 					]
 				}
 			},

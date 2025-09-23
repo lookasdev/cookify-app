@@ -214,7 +214,7 @@ async def list_pantry(current_user: UserInDB = Depends(get_current_user)):
         ))
     return PantryListOut(items=items)
 
-
+# new implementation of post pantry item endpoint with return document after for qa scripts
 @app.post("/users/me/pantry", response_model=PantryItemOut)
 async def upsert_pantry_item(
     item: PantryItemIn, 
@@ -232,7 +232,7 @@ async def upsert_pantry_item(
         {"userId": ObjectId(current_user.id), "name": item.name},
         {"$set": doc, "$setOnInsert": {"createdAt": datetime.now(timezone.utc)}},
         upsert=True,
-        return_document=ReturnDocument.AFTER   # 🔑 ensures you get the new doc
+        return_document=ReturnDocument.AFTER   # ensures you get the new doc
     )
     if not res:
         res = await pantry_collection.find_one(
@@ -246,6 +246,7 @@ async def upsert_pantry_item(
         added_at=res.get("addedAt", datetime.now(timezone.utc))
     )
 
+# previous implementation of post pantry item endpoint
 # @app.post("/users/me/pantry", response_model=PantryItemOut)
 # async def upsert_pantry_item(item: PantryItemIn, current_user: UserInDB = Depends(get_current_user)):
 #     doc = {

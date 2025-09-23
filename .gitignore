@@ -143,3 +143,6 @@ temp/
 .specstory/
 frontend/env.example
 backend/env.example
+
+# Postman env (local secrets)
+qa/Cookify_API_Local.postman_environment.json
